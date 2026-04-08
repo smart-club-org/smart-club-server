@@ -1,7 +1,9 @@
 package com.miras.smartclub.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.miras.smartclub.enums.Role;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "users")
@@ -10,7 +12,9 @@ public class User {
     private String id;
     private String firstName;
     private String lastName;
+    @Indexed(unique = true)
     private String phone;
+    @JsonIgnore
     private String password;
     private Role role;
 

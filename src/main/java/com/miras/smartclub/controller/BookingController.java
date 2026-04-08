@@ -2,8 +2,10 @@ package com.miras.smartclub.controller;
 
 import com.miras.smartclub.model.Club;
 import com.miras.smartclub.model.Reservation;
+import com.miras.smartclub.model.Seat;
 import com.miras.smartclub.service.ClubService;
 import com.miras.smartclub.service.ReservationService;
+import com.miras.smartclub.service.SeatService;
 import jakarta.servlet.http.HttpSession;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class BookingController {
 
     private final ReservationService reservationService;
     private final ClubService clubService;
+    private final SeatService seatService;
 
     @Data
     public static class AvailabilityRequest {
@@ -73,6 +76,12 @@ public class BookingController {
         if (req.getClubId() == null || req.getSeatIds() == null || req.getSeatIds().isEmpty() || req.getStart() == null || req.getEnd() == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "clubId, seatIds, start, end required"));
         }
+        if (!req.getEnd().after(req.getStart())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "end must be after start"));
+        }
+        if (!allSeatsBelongToClub(req.getClubId(), req.getSeatIds())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Some seatIds do not belong to the selected club"));
+        }
 
         // Check conflicts
         List<Reservation> conflicts = reservationService.findConflicts(req.getClubId(), req.getSeatIds(), req.getStart(), req.getEnd());
@@ -90,17 +99,22 @@ public class BookingController {
         r.setPackageId(req.getPackageId());
         r.setUserId(userId);
 
-        // Compute price: prefer provided, otherwise compute on server
-        Integer provided = req.getTotalPrice();
-        Integer computed = null;
-        if (provided != null) {
-            computed = provided;
-        } else {
-            computed = computePriceForReservation(req.getClubId(), req.getPackageId(), req.getSeatIds() == null ? 0 : req.getSeatIds().size());
+        Integer computed = computePriceForReservation(
+                req.getClubId(),
+                req.getPackageId(),
+                req.getSeatIds() == null ? 0 : req.getSeatIds().size()
+        );
+        if (computed == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Unable to calculate reservation price"));
         }
         r.setTotalPrice(computed);
 
-        Reservation saved = reservationService.createReservation(r);
+        Reservation saved;
+        try {
+            saved = reservationService.createReservation(r);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("message", "Reservation created");
@@ -109,7 +123,7 @@ public class BookingController {
         resp.put("computedPrice", computed); // полезно для отладки на клиенте
 
         // diagnostic logs (temporarily)
-        System.out.println("[BOOKING] reserve: clubId=" + req.getClubId() + " packageId=" + req.getPackageId() + " seats=" + req.getSeatIds() + " provided=" + provided + " computed=" + computed);
+        System.out.println("[BOOKING] reserve: clubId=" + req.getClubId() + " packageId=" + req.getPackageId() + " seats=" + req.getSeatIds() + " computed=" + computed);
 
         return ResponseEntity.ok(resp);
     }
@@ -266,5 +280,14 @@ public class BookingController {
             }
         }
         return null;
+    }
+
+    private boolean allSeatsBelongToClub(String clubId, List<String> seatIds) {
+        if (clubId == null || seatIds == null || seatIds.isEmpty()) return false;
+        Set<String> clubSeatIds = seatService.getSeatsByClub(clubId)
+                .stream()
+                .map(Seat::getId)
+                .collect(Collectors.toSet());
+        return clubSeatIds.containsAll(seatIds);
     }
 }

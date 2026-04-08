@@ -28,6 +28,10 @@ public class ReservationService {
         if (r == null) throw new IllegalArgumentException("Reservation is null");
         if (r.getCreatedAt() == null) r.setCreatedAt(new Date());
         if (r.getStatus() == null) r.setStatus(Reservation.ReservationStatus.ACTIVE);
+        List<Reservation> conflicts = findConflicts(r.getClubId(), r.getSeatIds(), r.getStart(), r.getEnd());
+        if (!conflicts.isEmpty()) {
+            throw new IllegalStateException("Some seats already booked");
+        }
         return reservationRepository.save(r);
     }
 

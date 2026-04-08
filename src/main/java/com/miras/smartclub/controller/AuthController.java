@@ -5,6 +5,7 @@ import com.miras.smartclub.model.dto.LoginRequest;
 import com.miras.smartclub.model.dto.RegisterRequest;
 import com.miras.smartclub.service.UserService;
 import com.miras.smartclub.util.PhoneUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -31,13 +32,16 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request,
+                                   HttpServletRequest httpRequest,
                                    HttpSession session) {
         try {
             request.setPhone(PhoneUtils.normalize(request.getPhone()));
             User loggedIn = userService.login(request);
 
-            session.setAttribute("userId", loggedIn.getId());
-            session.setAttribute("role", loggedIn.getRole());
+            session.invalidate();
+            HttpSession newSession = httpRequest.getSession(true);
+            newSession.setAttribute("userId", loggedIn.getId());
+            newSession.setAttribute("role", loggedIn.getRole());
 
             loggedIn.setPassword(null);
             return ResponseEntity.ok(loggedIn);
