@@ -47,12 +47,12 @@ public class UserService {
         String normalizedPhone = PhoneUtils.normalize(request.getPhone());
         Optional<User> found = userRepository.findByPhone(normalizedPhone);
         if (found.isEmpty()) {
-            throw new RuntimeException("User not found");
+            throw new RuntimeException("Invalid phone or password");
         }
 
         User existingUser = found.get();
         if (!passwordEncoder.matches(request.getPassword(), existingUser.getPassword())) {
-            throw new RuntimeException("Invalid password");
+            throw new RuntimeException("Invalid phone or password");
         }
 
         return existingUser;
@@ -71,7 +71,14 @@ public class UserService {
 
         if (firstName != null) u.setFirstName(firstName);
         if (lastName != null) u.setLastName(lastName);
-        if (phone != null && !phone.isBlank()) u.setPhone(PhoneUtils.normalize(phone));
+        if (phone != null && !phone.isBlank()) {
+            String normalizedPhone = PhoneUtils.normalize(phone);
+            Optional<User> existing = userRepository.findByPhone(normalizedPhone);
+            if (existing.isPresent() && !existing.get().getId().equals(userId)) {
+                throw new RuntimeException("User with this phone already exists");
+            }
+            u.setPhone(normalizedPhone);
+        }
 
         if (rawPassword != null && !rawPassword.isBlank()) {
             if (!PasswordValidator.isValid(rawPassword)) {
